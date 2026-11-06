@@ -1,17 +1,18 @@
 use std::any::Any;
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use aes_gcm_siv::aead::{Aead, KeyInit, OsRng};
-use aes_gcm_siv::password_hash::rand_core::RngCore;
 use aes_gcm_siv::{Aes256GcmSiv, Key, Nonce};
 use argon2::{Argon2, Params};
 use data_encoding::BASE64;
 use directories::ProjectDirs;
 use keyring_core::api::{CredentialApi, CredentialStoreApi};
 use keyring_core::{Credential, CredentialStore, Entry, Error, Result};
+use rand_core::RngCore;
 
 const FILENAME: &str = "credentials.enc";
 
@@ -40,19 +41,26 @@ struct TermuxCredential {
     user: String,
 }
 
+fn platform_error<E: std::fmt::Display>(e: E) -> Error {
+    Error::PlatformFailure(Box::new(io::Error::new(
+        io::ErrorKind::Other,
+        e.to_string(),
+    )))
+}
+
 impl Store {
     pub fn new() -> Result<Arc<CredentialStore>> {
         let dirs = ProjectDirs::from("", "termux", "komac")
-            .ok_or_else(|| Error::PlatformFailure("no project directory".into()))?;
+            .ok_or_else(|| platform_error("no project directory"))?;
         let path = dirs.data_local_dir().join(FILENAME);
         fs::create_dir_all(dirs.data_local_dir())
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
 
         let (salt, key) = if path.exists() {
             let contents = fs::read_to_string(&path)
-                .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+                .map_err(platform_error)?;
             let header: FileHeader = serde_json::from_str(&contents)
-                .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+                .map_err(platform_error)?;
             let key = derive_key(&header.salt)?;
             (header.salt, key)
         } else {
@@ -66,9 +74,9 @@ impl Store {
                 ciphertext: String::new(),
             };
             let contents = serde_json::to_string(&header)
-                .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+                .map_err(platform_error)?;
             fs::write(&path, contents)
-                .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+                .map_err(platform_error)?;
             (salt, key)
         };
 
@@ -86,9 +94,9 @@ impl Store {
     fn load(&self) -> Result<HashMap<String, Vec<u8>>> {
         let _guard = self.inner.lock.lock().unwrap();
         let contents = fs::read_to_string(&self.inner.path)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         let header: FileHeader = serde_json::from_str(&contents)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         if header.ciphertext.is_empty() {
             return Ok(HashMap::new());
         }
@@ -97,49 +105,49 @@ impl Store {
         let cipher = Aes256GcmSiv::new(&self.inner.key);
         let plaintext = cipher
             .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         serde_json::from_slice(&plaintext)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))
+            .map_err(platform_error)
     }
 
     fn save(&self, entries: &HashMap<String, Vec<u8>>) -> Result<()> {
         let _guard = self.inner.lock.lock().unwrap();
         let plaintext = serde_json::to_vec(entries)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
         let cipher = Aes256GcmSiv::new(&self.inner.key);
         let ciphertext = cipher
             .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         let header = FileHeader {
             salt: self.inner.salt.clone(),
             nonce: BASE64.encode(&nonce_bytes),
             ciphertext: BASE64.encode(&ciphertext),
         };
         let contents = serde_json::to_string(&header)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+            .map_err(platform_error)?;
         fs::write(&self.inner.path, contents)
-            .map_err(|e| Error::PlatformFailure(Box::from(e)))
+            .map_err(platform_error)
     }
 }
 
 fn derive_key(salt_b64: &str) -> Result<Key<Aes256GcmSiv>> {
     let salt = decode(salt_b64)?;
     let params = Params::new(64 * 1024, 3, 4, Some(32))
-        .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+        .map_err(platform_error)?;
     let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
     let mut okm = [0u8; 32];
     argon2
         .hash_password_into(b"", &salt, &mut okm)
-        .map_err(|e| Error::PlatformFailure(Box::from(e)))?;
+        .map_err(platform_error)?;
     Ok(*Key::<Aes256GcmSiv>::from_slice(&okm))
 }
 
 fn decode(b64: &str) -> Result<Vec<u8>> {
     BASE64
         .decode(b64.as_bytes())
-        .map_err(|e| Error::PlatformFailure(Box::from(e)))
+        .map_err(platform_error)
 }
 
 fn entry_key(service: &str, user: &str) -> String {
