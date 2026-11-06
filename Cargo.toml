@@ -7,16 +7,47 @@ authors = ["RC Chuah"]
 description = "A file-based AES-GCM-SIV keyring store for Termux/Android, implementing keyring-core"
 readme = "README.md"
 repository = "https://github.com/rc-chuah/termux-keyring-store"
+homepage = "https://github.com/rc-chuah/termux-keyring-store"
+documentation = "https://github.com/rc-chuah/termux-keyring-store/blob/main/README.md"
 license = "GPL-3.0-or-later"
 keywords = ["keyring", "termux", "android", "keychain", "credential"]
 categories = ["authentication", "command-line-interface"]
 
+[lib]
+name = "termux_keyring_store"
+path = "src/lib.rs"
+crate-type = ["lib"]
+doctest = true
+
 [dependencies]
-keyring-core = "1.0.1"
+keyring-core = "1.0"
 directories = "6.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-aes-gcm-siv = "0.11.1"
-argon2 = "0.5"
-rand_core = "0.6"
-data-encoding = "2.8"
+aes-gcm-siv = "0.12.1"
+argon2 = "0.5.3"
+data-encoding = "2.9"
+
+[profile.dev]
+opt-level = 1
+debug = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.test]
+inherits = "dev"
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.bench]
+inherits = "release"
+debug = false
+lto = true
+codegen-units = 1
