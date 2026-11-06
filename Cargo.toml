@@ -20,13 +20,14 @@ crate-type = ["lib"]
 doctest = true
 
 [dependencies]
-keyring-core = "1.0"
+keyring-core = "1.0.1"
 directories = "6.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-aes-gcm-siv = "0.12.1"
-argon2 = "0.5.3"
-data-encoding = "2.9"
+aes-gcm-siv = "0.11.1"
+argon2 = "0.5"
+rand_core = "0.6"
+data-encoding = "2.8"
 
 [profile.dev]
 opt-level = 1
