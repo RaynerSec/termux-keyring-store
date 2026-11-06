@@ -5,6 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use aes_gcm_siv::aead::rand_core::RngCore;
 use aes_gcm_siv::aead::{Aead, KeyInit, OsRng};
 use aes_gcm_siv::{Aes256GcmSiv, Key, Nonce};
 use argon2::{Argon2, Params};
@@ -12,7 +13,6 @@ use data_encoding::BASE64;
 use directories::ProjectDirs;
 use keyring_core::api::{CredentialApi, CredentialStoreApi};
 use keyring_core::{Credential, CredentialStore, Entry, Error, Result};
-use rand_core::RngCore;
 
 const FILENAME: &str = "credentials.enc";
 
