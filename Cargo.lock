@@ -493,7 +493,6 @@ dependencies = [
  "directories",
  "hkdf",
  "keyring-core",
- "rand_core",
  "serde",
  "serde_json",
  "sha2",
