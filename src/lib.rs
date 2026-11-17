@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use aes_gcm_siv::aead::{Aead, KeyInit, OsRng, Payload};
+use aes_gcm_siv::aead::{Aead, KeyInit, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Key, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use data_encoding::BASE64;
@@ -14,7 +14,7 @@ use directories::ProjectDirs;
 use hkdf::Hkdf;
 use keyring_core::api::{CredentialApi, CredentialStoreApi};
 use keyring_core::{Credential, CredentialStore, Entry, Error, Result};
-use rand_core::RngCore;
+use rand_core::{OsRng, TryRng};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
@@ -66,6 +66,10 @@ struct TermuxCredential {
 
 fn platform_error<E: std::fmt::Display>(e: E) -> Error {
     Error::PlatformFailure(Box::new(io::Error::other(e.to_string())))
+}
+
+fn fill_random_bytes(buf: &mut [u8]) -> Result<()> {
+    OsRng.try_fill_bytes(buf).map_err(platform_error)
 }
 
 fn resolve_default_passphrase() -> Zeroizing<String> {
@@ -173,7 +177,7 @@ impl Store {
             (vault.salt, enc_key, mac_key)
         } else {
             let mut salt_bytes = [0u8; 32];
-            OsRng.fill_bytes(&mut salt_bytes);
+            fill_random_bytes(&mut salt_bytes)?;
             let salt = BASE64.encode(&salt_bytes);
             let (enc_key, mac_key) = derive_subkeys(
                 passphrase.as_bytes(),
@@ -228,8 +232,9 @@ impl Store {
         let ciphertext = decode(&vault.ciphertext)?;
         let outer_aad = vault_outer_aad(&vault);
 
-        let key = Key::<Aes256GcmSiv>::from_slice(self.inner.enc_key.as_ref());
-        let cipher = Aes256GcmSiv::new(key);
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
+            .map_err(|_| platform_error("invalid key length"))?;
+        let cipher = Aes256GcmSiv::new(&key);
         let plaintext = Zeroizing::new(
             cipher
                 .decrypt(
@@ -270,7 +275,7 @@ impl Store {
 
         let plaintext = Zeroizing::new(serde_json::to_vec(entries).map_err(platform_error)?);
         let mut nonce_bytes = [0u8; 12];
-        OsRng.fill_bytes(&mut nonce_bytes);
+        fill_random_bytes(&mut nonce_bytes)?;
 
         let mut vault = VaultFileV2 {
             version: VAULT_VERSION,
@@ -285,11 +290,14 @@ impl Store {
         };
 
         let outer_aad = vault_outer_aad(&vault);
-        let key = Key::<Aes256GcmSiv>::from_slice(self.inner.enc_key.as_ref());
-        let cipher = Aes256GcmSiv::new(key);
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
+            .map_err(|_| platform_error("invalid key length"))?;
+        let nonce = Nonce::try_from(nonce_bytes.as_slice())
+            .map_err(|_| platform_error("invalid nonce length"))?;
+        let cipher = Aes256GcmSiv::new(&key);
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce_bytes),
+                &nonce,
                 Payload {
                     msg: plaintext.as_ref(),
                     aad: &outer_aad,
@@ -306,12 +314,15 @@ impl Store {
 
     fn encrypt_entry(&self, key_id: &str, secret: &[u8]) -> Result<EncryptedEntry> {
         let mut nonce_bytes = [0u8; 12];
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let key = Key::<Aes256GcmSiv>::from_slice(self.inner.enc_key.as_ref());
-        let cipher = Aes256GcmSiv::new(key);
+        fill_random_bytes(&mut nonce_bytes)?;
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
+            .map_err(|_| platform_error("invalid key length"))?;
+        let nonce = Nonce::try_from(nonce_bytes.as_slice())
+            .map_err(|_| platform_error("invalid nonce length"))?;
+        let cipher = Aes256GcmSiv::new(&key);
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce_bytes),
+                &nonce,
                 Payload {
                     msg: secret,
                     aad: key_id.as_bytes(),
@@ -329,8 +340,9 @@ impl Store {
         let nonce = Nonce::try_from(nonce_bytes.as_slice())
             .map_err(|_| platform_error("invalid entry nonce length"))?;
         let ciphertext = decode(&entry.ciphertext)?;
-        let key = Key::<Aes256GcmSiv>::from_slice(self.inner.enc_key.as_ref());
-        let cipher = Aes256GcmSiv::new(key);
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
+            .map_err(|_| platform_error("invalid key length"))?;
+        let cipher = Aes256GcmSiv::new(&key);
         cipher
             .decrypt(
                 &nonce,
