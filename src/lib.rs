@@ -261,8 +261,7 @@ impl Store {
     ) -> Result<()> {
         reject_symlink(&self.inner.path)?;
         if self.inner.path.exists() {
-            let existing_contents =
-                fs::read_to_string(&self.inner.path).map_err(platform_error)?;
+            let existing_contents = fs::read_to_string(&self.inner.path).map_err(platform_error)?;
             let existing: VaultFileV2 =
                 serde_json::from_str(&existing_contents).map_err(platform_error)?;
             verify_vault_mac(&existing, &self.inner.mac_key)?;
@@ -448,11 +447,7 @@ impl CredentialStoreApi for Store {
     }
 
     fn id(&self) -> String {
-        format!(
-            "{} v{}",
-            env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
-        )
+        format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
     }
 
     fn build(
