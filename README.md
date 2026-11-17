@@ -34,7 +34,7 @@ Or add `termux-keyring-store` and `keyring-core` to your `Cargo.toml`:
 ```toml
 [dependencies]
 keyring-core = "1.0.1"
-termux-keyring-store = "0.1.0"
+termux-keyring-store = "0.1.1"
 ```
 
 ## Usage
