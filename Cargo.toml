@@ -2,7 +2,7 @@
 name = "termux-keyring-store"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 authors = ["RC Chuah"]
 description = "A file-based AES-GCM-SIV keyring store for Termux/Android, implementing keyring-core"
 readme = "README.md"
