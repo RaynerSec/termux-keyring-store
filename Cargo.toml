@@ -31,7 +31,6 @@ hkdf = "0.13"
 sha2 = "0.11"
 subtle = "2.6"
 zeroize = { version = "1.8", features = ["derive"] }
-rand_core = "0.10"
 data-encoding = "2.8"
 
 [profile.dev]
