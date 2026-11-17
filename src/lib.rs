@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use aes_gcm_siv::aead::{Aead, KeyInit, Payload};
+use aes_gcm_siv::aead::{Aead, AeadCore, Generate, KeyInit, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Key, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use data_encoding::BASE64;
@@ -14,7 +14,6 @@ use directories::ProjectDirs;
 use hkdf::Hkdf;
 use keyring_core::api::{CredentialApi, CredentialStoreApi};
 use keyring_core::{Credential, CredentialStore, Entry, Error, Result};
-use rand_core::{OsRng, TryRng};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
@@ -68,8 +67,12 @@ fn platform_error<E: std::fmt::Display>(e: E) -> Error {
     Error::PlatformFailure(Box::new(io::Error::other(e.to_string())))
 }
 
-fn fill_random_bytes(buf: &mut [u8]) -> Result<()> {
-    OsRng.try_fill_bytes(buf).map_err(platform_error)
+fn generate_random_32() -> [u8; 32] {
+    Key::<Aes256GcmSiv>::generate().into()
+}
+
+fn generate_random_nonce() -> [u8; 12] {
+    Nonce::generate().into()
 }
 
 fn resolve_default_passphrase() -> Zeroizing<String> {
@@ -176,9 +179,8 @@ impl Store {
             verify_vault_mac(&vault, &mac_key)?;
             (vault.salt, enc_key, mac_key)
         } else {
-            let mut salt_bytes = [0u8; 32];
-            fill_random_bytes(&mut salt_bytes)?;
-            let salt = BASE64.encode(&salt_bytes);
+            let salt_bytes = Zeroizing::new(generate_random_32());
+            let salt = BASE64.encode(salt_bytes.as_ref());
             let (enc_key, mac_key) = derive_subkeys(
                 passphrase.as_bytes(),
                 &salt,
@@ -232,8 +234,8 @@ impl Store {
         let ciphertext = decode(&vault.ciphertext)?;
         let outer_aad = vault_outer_aad(&vault);
 
-        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
-            .map_err(|_| platform_error("invalid key length"))?;
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_ref())
+            .map_err(|_| platform_error("invalid encryption key length"))?;
         let cipher = Aes256GcmSiv::new(&key);
         let plaintext = Zeroizing::new(
             cipher
@@ -274,8 +276,7 @@ impl Store {
             .ok_or_else(|| platform_error("vault counter overflow"))?;
 
         let plaintext = Zeroizing::new(serde_json::to_vec(entries).map_err(platform_error)?);
-        let mut nonce_bytes = [0u8; 12];
-        fill_random_bytes(&mut nonce_bytes)?;
+        let nonce_bytes = generate_random_nonce();
 
         let mut vault = VaultFileV2 {
             version: VAULT_VERSION,
@@ -290,11 +291,11 @@ impl Store {
         };
 
         let outer_aad = vault_outer_aad(&vault);
-        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
-            .map_err(|_| platform_error("invalid key length"))?;
-        let nonce = Nonce::try_from(nonce_bytes.as_slice())
-            .map_err(|_| platform_error("invalid nonce length"))?;
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_ref())
+            .map_err(|_| platform_error("invalid encryption key length"))?;
         let cipher = Aes256GcmSiv::new(&key);
+        let nonce = Nonce::try_from(nonce_bytes.as_slice())
+            .map_err(|_| platform_error("invalid outer nonce length"))?;
         let ciphertext = cipher
             .encrypt(
                 &nonce,
@@ -313,13 +314,12 @@ impl Store {
     }
 
     fn encrypt_entry(&self, key_id: &str, secret: &[u8]) -> Result<EncryptedEntry> {
-        let mut nonce_bytes = [0u8; 12];
-        fill_random_bytes(&mut nonce_bytes)?;
-        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
-            .map_err(|_| platform_error("invalid key length"))?;
-        let nonce = Nonce::try_from(nonce_bytes.as_slice())
-            .map_err(|_| platform_error("invalid nonce length"))?;
+        let nonce_bytes = generate_random_nonce();
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_ref())
+            .map_err(|_| platform_error("invalid encryption key length"))?;
         let cipher = Aes256GcmSiv::new(&key);
+        let nonce = Nonce::try_from(nonce_bytes.as_slice())
+            .map_err(|_| platform_error("invalid entry nonce length"))?;
         let ciphertext = cipher
             .encrypt(
                 &nonce,
@@ -340,8 +340,8 @@ impl Store {
         let nonce = Nonce::try_from(nonce_bytes.as_slice())
             .map_err(|_| platform_error("invalid entry nonce length"))?;
         let ciphertext = decode(&entry.ciphertext)?;
-        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_slice())
-            .map_err(|_| platform_error("invalid key length"))?;
+        let key = Key::<Aes256GcmSiv>::try_from(self.inner.enc_key.as_ref())
+            .map_err(|_| platform_error("invalid encryption key length"))?;
         let cipher = Aes256GcmSiv::new(&key);
         cipher
             .decrypt(
@@ -602,16 +602,28 @@ mod tests {
                 enc_key: {
                     let raw = fs::read_to_string(&path).unwrap();
                     let v: VaultFileV2 = serde_json::from_str(&raw).unwrap();
-                    derive_subkeys(b"pass", &v.salt, v.argon2_m_cost, v.argon2_t_cost, v.argon2_p_cost)
-                        .unwrap()
-                        .0
+                    derive_subkeys(
+                        b"pass",
+                        &v.salt,
+                        v.argon2_m_cost,
+                        v.argon2_t_cost,
+                        v.argon2_p_cost,
+                    )
+                    .unwrap()
+                    .0
                 },
                 mac_key: {
                     let raw = fs::read_to_string(&path).unwrap();
                     let v: VaultFileV2 = serde_json::from_str(&raw).unwrap();
-                    derive_subkeys(b"pass", &v.salt, v.argon2_m_cost, v.argon2_t_cost, v.argon2_p_cost)
-                        .unwrap()
-                        .1
+                    derive_subkeys(
+                        b"pass",
+                        &v.salt,
+                        v.argon2_m_cost,
+                        v.argon2_t_cost,
+                        v.argon2_p_cost,
+                    )
+                    .unwrap()
+                    .1
                 },
                 salt: {
                     let raw = fs::read_to_string(&path).unwrap();
