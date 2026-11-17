@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use aes_gcm_siv::aead::{Aead, AeadCore, Generate, KeyInit, Payload};
+use aes_gcm_siv::aead::{Aead, Generate, KeyInit, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Key, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use data_encoding::BASE64;
