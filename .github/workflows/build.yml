@@ -110,7 +110,7 @@ jobs:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Check Android target
+      - name: Build for Android target
         run: |
           TARGET="${{ matrix.target }}"
           CLANG="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.clang }}"
@@ -121,7 +121,7 @@ jobs:
           export "CC_${TARGET_UPPER}=$CLANG"
           export "AR_${TARGET_UPPER}=$AR_TOOL"
 
-          cargo check --release --target "$TARGET" --verbose
+          cargo build --release --target "$TARGET" --verbose
 
   clippy:
     name: Clippy & Security Analysis
