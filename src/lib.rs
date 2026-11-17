@@ -1,3 +1,7 @@
+// termux-keyring-store
+// Written in Rust by RC Chuah-(RaynerSec)
+// SPDX-License-Identifier: MPL-2.0
+
 use std::any::Any;
 use std::collections::HashMap;
 use std::env;
