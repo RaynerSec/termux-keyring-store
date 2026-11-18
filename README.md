@@ -2,6 +2,7 @@
 
 [![Build & Analyze](https://github.com/rc-chuah/termux-keyring-store/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rc-chuah/termux-keyring-store/actions/workflows/build.yml)
 [![Crates.io Version](https://img.shields.io/crates/v/termux-keyring-store.svg)](https://crates.io/crates/termux-keyring-store)
+[![docs.rs](https://img.shields.io/docsrs/termux-keyring-store)](https://docs.rs/termux-keyring-store)
 [![Crates.io Downloads](https://img.shields.io/crates/d/termux-keyring-store.svg)](https://crates.io/crates/termux-keyring-store)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 
@@ -34,7 +35,7 @@ Or add `termux-keyring-store` and `keyring-core` to your `Cargo.toml`:
 ```toml
 [dependencies]
 keyring-core = "1.0.1"
-termux-keyring-store = "0.1.1"
+termux-keyring-store = "0.1.2"
 ```
 
 ## Usage
