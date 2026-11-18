@@ -14,7 +14,7 @@ Komac and other Rust tools use `keyring-core` to store credentials. On Linux the
 
 ## Security Architecture (v2 Vault Format)
 
-- **Key Derivation (Argon2id + HKDF-SHA256):** Derives a 256-bit master secret from a 32-byte random salt (`64 MiB` memory, `3` iterations, `4` lanes), then expands two domain-separated subkeys using HKDF-SHA256—one encryption key (`Aes256GcmSiv`) and one header authentication key (`BLAKE3`).
+- **Key Derivation (Argon2id + HKDF-SHA256):** Derives a 256-bit master secret from a 32-byte random salt (`64 MiB` memory, `3` iterations, `4` lanes), then expands two domain-separated subkeys using HKDF-SHA256: one encryption key (`Aes256GcmSiv`) and one header authentication key (`BLAKE3`).
 - **Authenticated Header & Anti-Rollback Protection:** Computes a keyed BLAKE3 MAC over the format version (`v2`), Argon2 cost parameters, salt, monotonic write counter, nonce, and ciphertext, verified in constant time (`subtle::ConstantTimeEq`) before decryption. Rejects any tampered header or rolled-back vault state.
 - **Per-Entry AES-256-GCM-SIV with AAD:** Encrypts each credential individually with a fresh 96-bit random nonce and binds `service\0user` as Additional Authenticated Data (AAD) to prevent entry-swapping attacks.
 - **Memory Zeroization:** Wraps derived keys, passphrases, and plaintext buffers in `Zeroizing<T>` so sensitive material is scrubbed from RAM immediately on drop.
