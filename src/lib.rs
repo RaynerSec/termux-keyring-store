@@ -1,3 +1,46 @@
+//! # `termux-keyring-store`
+//!
+//! A hardened, file-based keyring backend for Termux (Android) implementing the
+//! [`keyring_core`] v1 API with an authenticated **v2 vault format**.
+//!
+//! ## Security Architecture (v2 Vault Format)
+//!
+//! - **Key Derivation (`Argon2id` + `HKDF-SHA256`):** Derives a 256-bit master
+//!   secret from a 32-byte random salt (`64 MiB` memory, `3` iterations, `4`
+//!   lanes), then expands two domain-separated subkeys using HKDF-SHA256—one
+//!   encryption key ([`Aes256GcmSiv`]) and one header authentication key
+//!   ([`blake3`]).
+//! - **Authenticated Header & Anti-Rollback Protection:** Computes a keyed
+//!   BLAKE3 MAC over the format version (`v2`), Argon2 cost parameters, salt,
+//!   monotonic write counter, nonce, and ciphertext, verified in constant time
+//!   ([`ConstantTimeEq`]) before decryption.
+//! - **Per-Entry `AES-256-GCM-SIV` with AAD:** Encrypts each credential
+//!   individually with a fresh 96-bit random nonce and binds `service\0user` as
+//!   Additional Authenticated Data (AAD) to prevent entry-swapping attacks.
+//! - **Memory Zeroization:** Wraps derived keys, passphrases, and plaintext
+//!   buffers in [`Zeroizing`] so sensitive material is scrubbed from RAM on drop.
+//! - **Hardened File Storage:** Enforces `0o700` directory and `0o600` file
+//!   permissions on Unix/Android, rejects symbolic links, and performs `fsync`
+//!   + atomic renames (`credentials.enc.tmp`).
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use keyring_core::Entry;
+//! use termux_keyring_store::Store;
+//!
+//! fn main() -> keyring_core::Result<()> {
+//!     let store = Store::new()?;
+//!     keyring_core::set_default_store(store);
+//!
+//!     let entry = Entry::new("my-service", "my-user")?;
+//!     entry.set_password("super-secret-token")?;
+//!     assert_eq!(entry.get_password()?, "super-secret-token");
+//!     entry.delete_credential()?;
+//!     Ok(())
+//! }
+//! ```
+
 // termux-keyring-store
 // Written in Rust by RC Chuah-(RaynerSec)
 // SPDX-License-Identifier: MPL-2.0
