@@ -7,7 +7,7 @@
 //!
 //! - **Key Derivation (`Argon2id` + `HKDF-SHA256`):** Derives a 256-bit master
 //!   secret from a 32-byte random salt (`64 MiB` memory, `3` iterations, `4`
-//!   lanes), then expands two domain-separated subkeys using HKDF-SHA256—one
+//!   lanes), then expands two domain-separated subkeys using HKDF-SHA256: one
 //!   encryption key ([`Aes256GcmSiv`]) and one header authentication key
 //!   ([`blake3`]).
 //! - **Authenticated Header & Anti-Rollback Protection:** Computes a keyed
