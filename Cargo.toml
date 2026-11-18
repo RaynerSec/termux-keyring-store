@@ -8,7 +8,7 @@ description = "A file-based AES-GCM-SIV keyring store for Termux/Android, implem
 readme = "README.md"
 repository = "https://github.com/rc-chuah/termux-keyring-store"
 homepage = "https://rc-chuah.is-a.dev/termux-keyring-store/"
-documentation = "https://github.com/rc-chuah/termux-keyring-store/blob/main/README.md"
+documentation = "https://docs.rs/termux-keyring-store"
 license = "MPL-2.0"
 keywords = ["keyring", "termux", "android", "keychain", "credential"]
 categories = ["authentication", "command-line-interface"]
@@ -56,3 +56,14 @@ inherits = "release"
 debug = false
 lto = true
 codegen-units = 1
+
+[package.metadata.docs.rs]
+all-features = true
+default-target = "x86_64-unknown-linux-gnu"
+targets = [
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+    "i686-linux-android",
+    "x86_64-linux-android",
+]
+rustdoc-args = ["--cfg", "docsrs"]
